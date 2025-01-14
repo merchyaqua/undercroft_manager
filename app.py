@@ -1,3 +1,4 @@
+import sqlite3
 from flask import Flask
 import psycopg
 from dotenv import load_dotenv
@@ -10,29 +11,20 @@ app = Flask(__name__)
 # # connection is closed here.
 
 load_dotenv()
-url = os.environ.get("DATABASE_URL")
-conn = psycopg.connect(url)
+# url = os.environ.get("DATABASE_URL")
+# conn = psycopg.connect(url)
+conn = sqlite3.connect('undercroft_manager.db')
 cur = conn.cursor()
-# SQL Queries to set up tables
-CREATE_QUERIES = [
-    '''CREATE TABLE IF NOT EXISTS props (
-        propID SERIAL PRIMARY KEY,
-        name VARCHAR(50) NOT NULL,
-        description TEXT,
-        categoryID FOREIGN KEY,
-        isBroken BOOL NOT NULL,
-        locationID FOREIGN KEY,
-        photoPath TEXT,
+with open('schema.sql', 'r') as f:
+    schema = f.read()
+    cur.execute(schema)
 
-
-    )'''
-]
-insert_query = '''INSERT INTO props (name, description, categoryID, isBroken, locationID, photoPath)
-            VALUES (%s, %s)
-            RETURNING propID''', ('Sword', 'Odyssiad prop') # etc
-
-record = cur.execute(insert_query).fetchone()
+record = cur.execute('''INSERT INTO prop (name, description, categoryID, isBroken, locationID, photoPath)
+            VALUES (?, ?, ?, ?, ?, ?)
+            RETURNING propID;''', ('Sword', 'Odyssiad prop', 1, 0, 1, '')).fetchone()
 conn.commit()
-
+print(record)
 select_query = '''SELECT * FROM props WHERE name = %s''', ['Sword']
 record = cur.execute(select_query).fetchone() # this is how in version 3 you do things
+
+print(record)
