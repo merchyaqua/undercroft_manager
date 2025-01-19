@@ -1,4 +1,3 @@
-import sqlite3
 from flask import Flask
 import psycopg
 from dotenv import load_dotenv
@@ -11,13 +10,38 @@ app = Flask(__name__)
 # # connection is closed here.
 
 load_dotenv()
-# url = os.environ.get("DATABASE_URL")
-# conn = psycopg.connect(url)
-conn = sqlite3.connect('undercroft_manager.db')
+
+
+USER = os.getenv("user")
+PASSWORD = os.getenv("password")
+HOST = os.getenv("host")
+PORT = os.getenv("port")
+DBNAME = os.getenv("dbname")
+DBURI = '''postgresql://postgres:@localhost:5432/merch'''
+# Connect to the database
+try:
+    conn = psycopg.connect(host=HOST, user=USER, password=PASSWORD, port=PORT, dbname=DBNAME)
+    print("Connection successful!")
+    
+    # Example query
+
+    # # Close the cursor and connection
+    # cursor.close()
+    # connection.close()
+    # print("Connection closed.")
+
+except Exception as e:
+    print(f"Failed to connect: {e}")
+
+# conn = sqlite3.connect('undercroft_manager.db')
+
 cur = conn.cursor()
-with open('schema.sql', 'r') as f:
-    schema = f.read()
-    cur.execute(schema)
+cur.execute("SELECT NOW();")
+result = cur.fetchone()
+print("Current Time:", result)
+# with open('schema.sql', 'r') as f:
+#     schema = f.read()
+#     cur.execute(schema)
 
 record = cur.execute('''INSERT INTO prop (name, description, categoryID, isBroken, locationID, photoPath)
             VALUES (?, ?, ?, ?, ?, ?)

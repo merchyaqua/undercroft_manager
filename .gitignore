@@ -1,0 +1,4 @@
+.env
+flask.env
+undercroft_manager.db
+__pycache__/app.cpython-313.pyc
