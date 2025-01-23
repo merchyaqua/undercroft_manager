@@ -1,14 +1,13 @@
-
 -- Basic inventory features
-`
+
 CREATE TABLE IF NOT EXISTS category (
         categoryID SERIAL PRIMARY KEY ,
-        name VARCHAR(50) NOT NULL
-);`
+        name VARCHAR(50) NOT NULL UNIQUE
+);
 
 CREATE TABLE IF NOT EXISTS location (
         locationID SERIAL PRIMARY KEY ,
-        name VARCHAR(50) NOT NULL
+        name VARCHAR(50) NOT NULL UNIQUE
 );
 
 CREATE TABLE IF NOT EXISTS prop (
@@ -21,19 +20,15 @@ CREATE TABLE IF NOT EXISTS prop (
         photoPath TEXT
 );
 
-INSERT INTO prop VALUES ('')
-
 CREATE TABLE IF NOT EXISTS costume (
         size VARCHAR(50) NOT NULL,
         material VARCHAR(50)
 ) INHERITS (prop);
 
-
 CREATE TABLE IF NOT EXISTS tag (
         tagID SERIAL PRIMARY KEY,
-        name VARCHAR(50) NOT NULL
+        name VARCHAR(50) NOT NULL UNIQUE
 );
-
 
 CREATE TABLE IF NOT EXISTS prop_tag (
         tagID INTEGER REFERENCES tag(tagID),
