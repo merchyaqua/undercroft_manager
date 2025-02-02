@@ -1,3 +1,16 @@
+-- Turn on security
+alter table "todos"
+enable row level security;
+
+-- Allow anonymous access
+create policy "Allow public access"
+  on todos
+  for select
+  to anon
+  using (true);
+
+
+
 -- Basic inventory features
 
 CREATE TABLE IF NOT EXISTS category (
