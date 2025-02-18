@@ -31,11 +31,11 @@
 -- HAVING count(*) = 2
 -- ;
 
-SELECT propID, prop.name AS propName, description, location.name AS locationName, isBroken
-FROM prop, location
-WHERE prop.locationID = location.locationID
-AND prop.propID = 2
-;
+-- SELECT propID, prop.name AS propName, description, location.name AS locationName, isBroken
+-- FROM prop, location
+-- WHERE prop.locationID = location.locationID
+-- AND prop.propID = 2
+-- ;
 
 
 -- DELETE FROM prop WHERE propID = 2;
@@ -47,3 +47,8 @@ AND prop.propID = 2
 -- DROP TABLE prop;
 -- DROP TABLE location;
 -- DROP TABLE category;
+
+-- Ensure the productionID exists in the production table
+INSERT INTO production (productionID, name) VALUES (2, 'Production Name');
+
+INSERT INTO propsList (title, productionID) VALUES ('Props', 2);
