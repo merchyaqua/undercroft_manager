@@ -1,5 +1,5 @@
 from flask import Flask, jsonify
-from flask import render_template, request, redirect
+from flask import request, redirect
 from flask_cors import CORS
 from connect_db import connect
 app = Flask(__name__)
@@ -100,9 +100,10 @@ def category():
             SELECT name, categoryID FROM category;''').fetchall()
         return jsonify(record)
     elif request.method == 'POST':
-        cur.execute('''
-            SELECT name, categoryID FROM category;''').fetchall()
-        # Then it's the client's responsibility to reload the categories
+        categoryID = cur.execute('''
+            INSERT INTO category (name) VALUES (%s) RETURNING categoryID;''', [request.get_json()['name']]).fetchone()
+        print(categoryID)
+        return jsonify(categoryID['categoryid'])
 
 @app.route('/location', methods=['GET', 'POST'])
 def location():
@@ -111,8 +112,10 @@ def location():
             SELECT name, locationID FROM location;''').fetchall()
         return jsonify(record)
     elif request.method == 'POST':
-        cur.execute('''
-            SELECT name, categoryID FROM category;''').fetchall()
+        locationID = cur.execute('''
+            INSERT INTO location (name) VALUES (%s) RETURNING locationID;''', [request.get_json()['name']]).fetchone()
+        print(locationID)
+        return jsonify(locationID['locationid'])
         # Then it's the client's responsibility to reload the categories
     
 # --------------------------------------
@@ -126,11 +129,12 @@ def production():
         return jsonify(record)
     elif request.method == 'POST':
         # Adding a new production
+        
         formData = request.get_json()
         data = dict(formData)
         productionID = cur.execute('''
-            INSERT INTO production (title, firstShowDate, lastShowDate, directorID, producerID, photoPath) 
-            VALUES (%(title)s,%(firstShowDate)s,%(lastShowDate)s,%(directorID)s,%(producerID)s,%(photoPath)s)
+            INSERT INTO production (title, firstShowDate, lastShowDate, photoPath) 
+            VALUES (%(title)s,%(firstShowDate)s,%(lastShowDate)s, %(photoPath)s)
             RETURNING productionID;
         ''', data).fetchone() # check if the dates go in fine - and is it best to store date not big int for js ms
         return productionID
@@ -140,7 +144,7 @@ def production_detail(id):
     if request.method == 'GET':
         # Return all details about a production
         record = cur.execute('''
-            SELECT * FROM production WHERE productionID = %s;''', id).fetchall()
+            SELECT * FROM production WHERE productionID = %s;''', [id]).fetchone()
         return jsonify(record)
     elif request.method == 'PUT': # TODO change the queries to match
         # Update production details. So annoying to have to write out all the field names though. Is it common practice to have a form like this and have it update the whole thing?
@@ -153,14 +157,15 @@ def production_detail(id):
         cur.execute('''DELETE FROM production WHERE productionID = %(productionID)s''', {'productionID': id})
         return "Delete successful"
 
-@app.route('/production/<int:productionID>/props-list/', methods=['GET', 'POST'])
+@app.route('/production/<int:productionID>/props-list', methods=['GET', 'POST'])
 def props_list(productionID):
     # Return the ID and title props lists for a production
     if request.method == 'GET':
         record = cur.execute('''
-            SELECT (propsListID, propsList.title AS propsListTitle, production.title AS productionListTitle) 
+            SELECT propsListID, propsList.title AS propsListTitle, production.title AS productionTitle
             FROM propsList, production 
-            WHERE productionID = %s;''', [productionID]).fetchall()
+            WHERE propsList.productionID = %s;''', [productionID]).fetchall()
+        # print(record)
         return jsonify(record)
     elif request.method == 'POST':
     # Create a new props list for production, returning propsListID for redirecting.
@@ -168,15 +173,34 @@ def props_list(productionID):
             INSERT INTO propsList (productionID, title) 
             VALUES (%(productionID)s,%(title)s)
             RETURNING propsListID;
-        ''', {'productionID': productionID, 'title': request.form.get('title')}).fetchone() # not sure if i need to fetch for the id to be returned
-        return propsListID
+        ''', {'productionID': productionID, 'title':request.get_json()['title']}).fetchone() # not sure if i need to fetch for the id to be returned
+        return jsonify(propsListID)
     
-@app.route('/props-list/<int:propsListID>', methods=['GET', 'PUT', 'DELETE'])
+@app.route('/props-list/<int:propsListID>', methods=['GET','POST','PUT', 'DELETE'])
 def props_list_details(propsListID):
-    # Return all the props list items for a props list given the propsListID
+    # Return all the props list items with details / the name of the production for a props list given the propsListID
     if request.method == 'GET':
+        result = cur.execute("""SELECT production.title AS productionTitle, propsList.title AS propsListTitle
+                                       FROM production, propsList
+                                       WHERE propsListID = %(propsListID)s
+                                       AND production.productionID = propsList.productionID;""", 
+                                       {'propsListID': propsListID}).fetchone()
+        print(result)
         propsListItems = cur.execute("SELECT * FROM propsListItem WHERE propsListID = %(propsListID)s;", {'propsListID': propsListID}).fetchall()
-        return jsonify(propsListItems)
+        return jsonify({'productionTitle': result['productiontitle'],
+                        'propsListTitle': result['propslisttitle'],
+                         'propsListItems': propsListItems})
+    elif request.method == "POST":
+        # Create a new entry to this props list, returning propsListItemID for client to reference for further operations
+        data = dict(request.get_json()) # maybe make consistent across all post requests
+        data['propsListID'] = propsListID
+        propsListItemID = cur.execute('''
+            INSERT INTO propsListItem (propsListID, name, description, sourceStatus, action) 
+            VALUES (%(propsListID)s,%(name)s)
+            RETURNING propsListItemID;
+        ''', data).fetchone() # not sure if i need to fetch for the id to be returned
+        return jsonify(propsListItemID)
+
 
 @app.route('/props-list-item/<int:propsListItemID>', methods=['GET', 'PUT'])
 def props_list_item(propsListItemID):

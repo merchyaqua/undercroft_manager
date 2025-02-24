@@ -106,6 +106,8 @@ CREATE TABLE IF NOT EXISTS propsListItem (
         propID INTEGER NOT NULL REFERENCES prop(propID)
 
 );
+ALTER TABLE propsListItem
+ALTER COLUMN propID DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS costumeListItem (
         size VARCHAR(50), -- someday we could set this to actors
