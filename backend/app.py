@@ -3,6 +3,7 @@ from flask import request, redirect
 from flask_cors import CORS
 from connect_db import connect
 app = Flask(__name__)
+# Ensure the frontend running on a different port is allowed to request data
 CORS(app)
 
 conn = connect()
@@ -71,6 +72,14 @@ def prop_detail(id):
             WHERE prop.locationID = location.locationID
             AND prop.propID = (%(propID)s)
             ;''', {'propID': propID}).fetchall()
+        # see if any upcoming productions involve this prop
+        available = cur.execute('''SELECT COUNT(propsListItemID)=0 AS available
+                                FROM propsListItem, propsList, production, prop
+                                WHERE propsListItem.propID = %(propID)s -- Has been linked to an item
+                                AND production.lastShowDate > NOW() -- The show has not concluded
+                                AND propsListItem.propsListID = propsList.propsListID -- Linking by foreign keys
+                                AND propsList.productionID = production.productionID;''', {"propID": propID}).fetchone()
+        print(available)
         if not record:
             
             return redirect("/not-found")
@@ -155,7 +164,7 @@ def production_detail(id):
         return id
     elif request.method == 'DELETE':
         cur.execute('''DELETE FROM production WHERE productionID = %(productionID)s''', {'productionID': id})
-        return "Delete successful"
+        return jsonify("Delete successful")
 
 @app.route('/production/<int:productionID>/props-list', methods=['GET', 'POST'])
 def props_list(productionID):
@@ -164,8 +173,9 @@ def props_list(productionID):
         record = cur.execute('''
             SELECT propsListID, propsList.title AS propsListTitle, production.title AS productionTitle
             FROM propsList, production 
-            WHERE propsList.productionID = %s;''', [productionID]).fetchall()
-        # print(record)
+            WHERE propsList.productionID = %s
+            AND propsList.productionID = production.productionID;''', [productionID]).fetchall()
+        print(record)
         return jsonify(record)
     elif request.method == 'POST':
     # Create a new props list for production, returning propsListID for redirecting.
@@ -180,15 +190,14 @@ def props_list(productionID):
 def props_list_details(propsListID):
     # Return all the props list items with details / the name of the production for a props list given the propsListID
     if request.method == 'GET':
-        result = cur.execute("""SELECT production.title AS productionTitle, propsList.title AS propsListTitle
+        titleInfo = cur.execute("""SELECT production.title AS productionTitle, propsList.title AS propsListTitle
                                        FROM production, propsList
                                        WHERE propsListID = %(propsListID)s
                                        AND production.productionID = propsList.productionID;""", 
                                        {'propsListID': propsListID}).fetchone()
-        print(result)
         propsListItems = cur.execute("SELECT * FROM propsListItem WHERE propsListID = %(propsListID)s;", {'propsListID': propsListID}).fetchall()
-        return jsonify({'productionTitle': result['productiontitle'],
-                        'propsListTitle': result['propslisttitle'],
+        return jsonify({'productionTitle': titleInfo['productiontitle'],
+                        'propsListTitle': titleInfo['propslisttitle'],
                          'propsListItems': propsListItems})
     elif request.method == "POST":
         # Create a new entry to this props list, returning propsListItemID for client to reference for further operations
@@ -196,20 +205,31 @@ def props_list_details(propsListID):
         data['propsListID'] = propsListID
         propsListItemID = cur.execute('''
             INSERT INTO propsListItem (propsListID, name, description, sourceStatus, action) 
-            VALUES (%(propsListID)s,%(name)s)
+            VALUES (%(propsListID)s,%(name)s, %(description)s, %(sourceStatus)s, %(action)s)
             RETURNING propsListItemID;
-        ''', data).fetchone() # not sure if i need to fetch for the id to be returned
+        ''', data).fetchone() 
         return jsonify(propsListItemID)
 
 
-@app.route('/props-list-item/<int:propsListItemID>', methods=['GET', 'PUT'])
+@app.route('/props-list-item/<int:propsListItemID>', methods=['GET', 'PUT', 'DELETE'])
 def props_list_item(propsListItemID):
     # Returns the fields for particular a record of a props list item given propsListItemID, allowing updates
     if request.method == 'GET':
         propsListItem = cur.execute("SELECT * FROM propsListItems WHERE propsListItemID = %(propsListItemID)s;", {'propsListItemID': propsListItemID}).fetchone()
         return jsonify(propsListItem)
     elif request.method == 'PUT':
-        cur.execute("UPDATE propsListItem SET (fields) = (data) WHERE propsListItemID = %(propsListItemID)s;", {'propsListItemID': propsListItemID}).fetchone()
+        data = dict(request.get_json()) # maybe make consistent across all post requests
+        print(data)
+        data["propsListItemID"] = propsListItemID
+        cur.execute('''UPDATE propsListItem 
+                    SET (name, description, sourcestatus, action) = 
+                    (%(name)s, %(description)s, %(sourceStatus)s, %(action)s) 
+                    WHERE propsListItemID = %(propsListItemID)s;''', data)
+        return jsonify("Update successful")
+    elif request.method == "DELETE":
+        cur.execute("DELETE FROM propsListItem WHERE propsListItemID = %(propsListItemID)s;", {'propsListItemID': propsListItemID})
+        return jsonify("Delete successful")
+        
 
 
 
