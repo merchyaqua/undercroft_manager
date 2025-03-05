@@ -54,12 +54,10 @@ def inventory():
         # request.form['name']
         # Add the record
         data['isBroken'] = data['isBroken'] == "on"
-        id = cur.execute('''INSERT INTO prop (name, description, isBroken, categoryID, locationID) 
-                         VALUES (%(name)s,%(description)s, %(isBroken)s, %(categoryID)s,%(locationID)s) 
-                         RETURNING propID''', data)
-        # Autocommit is turned on.
-        id = 2
-        return jsonify({"propID": id})
+        res = cur.execute('''INSERT INTO prop (name, description, isBroken, categoryID, locationID, photoPath) 
+                         VALUES (%(name)s,%(description)s, %(isBroken)s, %(categoryID)s,%(locationID)s, %(photoPath)s) 
+                         RETURNING propID''', data).fetchone()
+        return jsonify(res)
 
 @app.route('/prop/<int:id>', methods=['GET', 'PUT'])
 def prop_detail(id):
