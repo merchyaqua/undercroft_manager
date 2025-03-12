@@ -16,12 +16,14 @@ def inventory():
         query = request.args.get('query') # access the search query
         tagIDs = request.args.getlist('tagIDs') # access the tags
         categoryID =  request.args.get('categoryID') # access the category
-        if not (any([(not query == ''), tagIDs, categoryID])): # Return all results if no conditions
-            record = cur.execute('''SELECT propID, prop.name AS propName, description, location.name AS locationName, isBroken, photoPath
+        # Return all results if no parameters are provided
+        if not (any([(not query == ''), tagIDs, categoryID])): 
+            record = cur.execute('''
+                SELECT propID, prop.name AS propName, description, location.name AS locationName, isBroken, photoPath
                 FROM prop, location
                 WHERE prop.locationID = location.locationID;''').fetchall()
-        else: # Return wanted things
-            
+        else: 
+            # Return wanted things
             if not tagIDs:
                 tagIDs = [1]
             if not categoryID:
@@ -37,21 +39,17 @@ def inventory():
                 AND categoryID = (%(categoryID)s)
                 GROUP BY propID, location.name
                 HAVING count(*) = %(tagLen)s
-
                 ;''', {'query': query, 'categoryID':categoryID, 'tagIDs':tagIDs, 'tagLen': len(tagIDs)}).fetchall()
-            # https://elliotchance.medium.com/handling-tags-in-a-sql-database-5597b9894049
+            # 
             # Filter using tags - select those who have all tags in query.
             
             # clever find status by:
             # Checking that it is not broken
-        # print(record)
         return jsonify(record)
     elif request.method == 'POST':
-        # Retrieve form data
+        # Retrieve form data in a dict format to pass to psycopg
         formData = request.get_json()
         data = dict(formData)
-        # request.files['image'] # fly this over to imgur
-        # request.form['name']
         # Add the record
         data['isBroken'] = data['isBroken'] == "on"
         res = cur.execute('''INSERT INTO prop (name, description, isBroken, categoryID, locationID, photoPath) 
@@ -59,7 +57,7 @@ def inventory():
                          RETURNING propID''', data).fetchone()
         return jsonify(res)
 
-@app.route('/prop/<int:id>', methods=['GET', 'PUT'])
+@app.route('/prop/<int:id>', methods=['GET', 'PUT', 'DELETE'])
 def prop_detail(id):
     propID = id
     if request.method == 'GET':
@@ -79,10 +77,8 @@ def prop_detail(id):
                                 AND propsList.productionID = production.productionID;''', {"propID": propID}).fetchone()
         print(available)
         if not record:
-            
             return redirect("/not-found")
         return jsonify(record[0])
-    
     elif request.method == 'PUT':
         # Update the prop with given data
         cur.execute('''UPDATE prop 
@@ -93,12 +89,6 @@ def prop_detail(id):
     elif request.method == 'DELETE':
         cur.execute('''DELETE FROM prop WHERE propID = %(propID)s''', {'propID': propID})
         return "Delete successful"
-    
-# @app.route('/prop/<int:id>', methods=['GET', 'PUT', 'DELETE'])
-# def manipulate_prop():
-#     pass
-
-# --------------------------------------
 
 @app.route('/category', methods=['GET', 'POST'])
 def category():
@@ -227,7 +217,19 @@ def props_list_item(propsListItemID):
     elif request.method == "DELETE":
         cur.execute("DELETE FROM propsListItem WHERE propsListItemID = %(propsListItemID)s;", {'propsListItemID': propsListItemID})
         return jsonify("Delete successful")
-        
+
+@app.route('/props-list-item/<int:propsListItemID>/link', methods=['POST'])
+def props_list_item_link(propsListItemID):
+    # Link a prop
+    if request.method == 'POST':
+        data = dict(request.get_json())
+        print(data)
+        data["propsListItemID"] = propsListItemID
+        cur.execute('''UPDATE propsListItem 
+                    SET (propID) = (%(propID)s) 
+                    WHERE propsListItemID = %(propsListItemID)s;''', data)
+        return jsonify("Prop link successful")
+          
 
 
 
