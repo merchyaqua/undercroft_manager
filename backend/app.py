@@ -16,49 +16,68 @@ def inventory():
         query = request.args.get('query') # access the search query
         tagIDs = request.args.getlist('tagIDs') # access the tags
         categoryID =  request.args.get('categoryID') # access the category
+        print(query, categoryID)
         # Return all results if no parameters are provided
-        if not (any([(not query == ''), tagIDs, categoryID])): 
-            records = cur.execute('''
-                SELECT propID, prop.name AS propName, description, location.name AS locationName, isBroken, photoPath
-                FROM prop, location
-                WHERE prop.locationID = location.locationID;''').fetchall()
+        # Initially, I used this code for optional query parameters. However, this was inefficient since I was running a query for every single prop.
+        # Return wanted things
+        newquery = query
+        sqlQuery = """
+            SELECT prop.propID, prop.name AS propName, isBroken, location.name AS locationName, prop.photoPath,
+                CASE 
+                    WHEN production.productionID IS NULL 
+                    THEN 1 
+                    ELSE 0
+                END AS available
+            FROM prop
+
+            JOIN location USING(locationID)
+            LEFT JOIN propsListItem ON propsListItem.propID = prop.propID
+            LEFT JOIN propsList ON propsList.propsListID = propsListItem.propsListID
+            LEFT JOIN production ON 
+                propsList.productionID = production.productionID
+                AND production.lastShowDate > NOW() -- Only include ongoing productions
+
+            WHERE
+                COALESCE(%(query)s) IS NULL OR UPPER(prop.name) LIKE UPPER((%(query)s::text))
+                AND COALESCE(%(categoryID)s) IS NULL OR categoryID = %(categoryID)s::int
+
+            GROUP BY (prop.propID, location.name, production.productionID);
+        """
+    #     sqlQuery = f'''
+    #         SELECT propID, prop.name AS propName, isBroken, location.name AS locationName, photoPath
+    #         FROM prop
+    #         {"JOIN prop_tag USING (propID)"  if tagIDs else ''}
+    #         JOIN location USING (locationID)
+    #         WHERE 
+    #         NOT propID = -1 
+    #         {"AND tagID = ANY (%(tagIDs)s)" if tagIDs else ''}
+    #         {"AND UPPER(prop.name) LIKE UPPER(%(query)s)" if query else ''}
+    #         {"AND categoryID = %(categoryID)s" if categoryID else ''}
+    #         GROUP BY propID, location.name
+    #         {"HAVING count(*) = %(tagLen)s" if tagIDs else ''}
             
-        else: 
-            # Return wanted things
-            newquery = '%' + query + '%'
-            sqlQuery = f'''
-                SELECT propID, prop.name AS propName, isBroken, location.name AS locationName, photoPath
-                FROM prop
-                {"JOIN prop_tag USING (propID)"  if tagIDs else ''}
-                JOIN location USING (locationID)
-                WHERE 
-                NOT propID = -1 
-                {"AND tagID = ANY (%(tagIDs)s)" if tagIDs else ''}
-                {"AND UPPER(prop.name) LIKE UPPER(%(query)s)" if query else ''}
-                {"AND categoryID = %(categoryID)s" if categoryID else ''}
-                GROUP BY propID, location.name
-                {"HAVING count(*) = %(tagLen)s" if tagIDs else ''}
+    #         ;'''
+    #     print(sqlQuery)
+        records = cur.execute(sqlQuery, {'query': newquery if newquery else None, 
+                                            'categoryID':int(categoryID) if categoryID else None, 
+                                            'tagIDs':tagIDs, 'tagLen': len(tagIDs)}).fetchall()
+    #     # 
+    #     # Filter using tags - select those who have all tags in query.
+        
+    #     # clever find status by:
+    #     # Checking that it is not broken
+    # newRecords = []
+    # for record in records:
+    #         available = cur.execute('''SELECT COUNT(propsListItemID)=0 AS available
+    #                         FROM propsListItem, propsList, production, prop
+    #                         WHERE propsListItem.propID = %(propID)s -- Has been linked to an item
+    #                         AND production.lastShowDate > NOW() -- The show has not concluded
+    #                         AND propsListItem.propsListID = propsList.propsListID -- Linking by foreign keys
+    #                         AND propsList.productionID = production.productionID;''', {"propID": record['propid']}).fetchone()
+    #         record['available'] = available['available']
+    #         newRecords.append(record)
                 
-                ;'''
-            print(sqlQuery)
-            records = cur.execute(sqlQuery, {'query': newquery, 'categoryID':categoryID, 'tagIDs':tagIDs, 'tagLen': len(tagIDs)}).fetchall()
-            # 
-            # Filter using tags - select those who have all tags in query.
-            
-            # clever find status by:
-            # Checking that it is not broken
-        newRecords = []
-        for record in records:
-                available = cur.execute('''SELECT COUNT(propsListItemID)=0 AS available
-                                FROM propsListItem, propsList, production, prop
-                                WHERE propsListItem.propID = %(propID)s -- Has been linked to an item
-                                AND production.lastShowDate > NOW() -- The show has not concluded
-                                AND propsListItem.propsListID = propsList.propsListID -- Linking by foreign keys
-                                AND propsList.productionID = production.productionID;''', {"propID": record['propid']}).fetchone()
-                record['available'] = available['available']
-                newRecords.append(record)
-                
-        return jsonify(newRecords)
+        return jsonify(records)
     elif request.method == 'POST':
         # Retrieve form data in a dict format to pass to psycopg
         formData = request.get_json()
@@ -95,10 +114,12 @@ def prop_detail(id):
         return jsonify(record)
     elif request.method == 'PUT':
         # Update the prop with given data
+        formData = request.get_json()
+        data = dict(formData)
         cur.execute('''UPDATE prop 
                         SET (name, description,  categoryID, locationID) 
-                         = (%s,%s,%s,%s) 
-                         WHERE propID = %s''', [propID])
+                         = (%(name)s,%(description)s,%(categoryID)s,%(locationID)s) 
+                         WHERE propID = %s''', data)
         return propID
     elif request.method == 'DELETE':
         cur.execute('''DELETE FROM prop WHERE propID = %(propID)s''', {'propID': propID})
