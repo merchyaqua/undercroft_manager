@@ -80,8 +80,7 @@ def inventory():
         return jsonify(records)
     elif request.method == 'POST':
         # Retrieve form data in a dict format to pass to psycopg
-        formData = request.get_json()
-        data = dict(formData)
+        data = dict(request.get_json())
         # Add the record
         data['isBroken'] = data['isBroken'] == "on"
         res = cur.execute('''INSERT INTO prop (name, description, isBroken, categoryID, locationID, photoPath) 
@@ -109,13 +108,12 @@ def prop_detail(id):
                                 AND propsList.productionID = production.productionID;''', {"propID": propID}).fetchone()
         if not record:
             return redirect("/not-found")
-        record["available"] = "Available" if available["available"] else "In use"
+        record["available"] = int(available["available"])
         print((record))
         return jsonify(record)
     elif request.method == 'PUT':
         # Update the prop with given data
-        formData = request.get_json()
-        data = dict(formData)
+        data = dict(request.get_json())
         cur.execute('''UPDATE prop 
                         SET (name, description,  categoryID, locationID) 
                          = (%(name)s,%(description)s,%(categoryID)s,%(locationID)s) 
@@ -123,7 +121,7 @@ def prop_detail(id):
         return propID
     elif request.method == 'DELETE':
         cur.execute('''DELETE FROM prop WHERE propID = %(propID)s''', {'propID': propID})
-        return "Delete successful"
+        return jsonify("Delete successful")
 
 @app.route('/category', methods=['GET', 'POST'])
 def category():
@@ -162,8 +160,7 @@ def production():
     elif request.method == 'POST':
         # Adding a new production
         
-        formData = request.get_json()
-        data = dict(formData)
+        data = dict(request.get_json())
         productionID = cur.execute('''
             INSERT INTO production (title, firstShowDate, lastShowDate, photoPath) 
             VALUES (%(title)s,%(firstShowDate)s,%(lastShowDate)s, %(photoPath)s)
@@ -178,11 +175,12 @@ def production_detail(id):
         record = cur.execute('''
             SELECT * FROM production WHERE productionID = %s;''', [id]).fetchone()
         return jsonify(record)
-    elif request.method == 'PUT': # TODO change the queries to match
-        # Update production details. So annoying to have to write out all the field names though. Is it common practice to have a form like this and have it update the whole thing?
-        cur.execute('''UPDATE production (name, firstShowDate, lastShowDate, directorID, producerID, photoPath) 
-            SET (%(name)s,%(firstShowDate)s,%(lastShowDate)s,%(directorID)s,%(producerID)s,%(photoPath)s)
-            WHERE productionID = %(productionID)s''', request.form + {'productionID': id}) # Concatenate the form MultiDict with productionID as a new key value pair.
+    elif request.method == 'PUT': 
+        # Update production details.
+        data = dict(request.get_json())
+        cur.execute('''UPDATE production (name, firstShowDate, lastShowDate, photoPath) 
+            SET (%(name)s,%(firstShowDate)s,%(lastShowDate)s,%(photoPath)s)
+            WHERE productionID = %(productionID)s''', data.update({'productionID': id})) # Concatenate the form MultiDict with productionID as a new key value pair.
             
         return id
     elif request.method == 'DELETE':
@@ -193,7 +191,6 @@ def production_detail(id):
 def props_list(productionID):
     # Return the ID and title props lists for a production
     if request.method == 'GET':
-        print('lll')
         record = cur.execute('''
             SELECT propsListID, propsList.title AS propsListTitle, production.title AS productionTitle
             FROM propsList, production 
@@ -225,7 +222,7 @@ def props_list_details(propsListID):
                          'propsListItems': propsListItems})
     elif request.method == "POST":
         # Create a new entry to this props list, returning propsListItemID for client to reference for further operations
-        data = dict(request.get_json()) # maybe make consistent across all post requests
+        data = dict(request.get_json())
         data['propsListID'] = propsListID
         propsListItemID = cur.execute('''
             INSERT INTO propsListItem (propsListID, name, description, sourceStatus, action) 
@@ -233,6 +230,9 @@ def props_list_details(propsListID):
             RETURNING propsListItemID;
         ''', data).fetchone() 
         return jsonify(propsListItemID)
+    elif request.method == "DELETE":
+        cur.execute("DELETE FROM propsList WHERE propsListID = %s", [propsListID])
+        return jsonify("Delete successful for propsListID " + propsListID)
 
 
 @app.route('/props-list-item/<int:propsListItemID>', methods=['GET', 'PUT', 'DELETE'])
