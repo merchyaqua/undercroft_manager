@@ -38,8 +38,8 @@ def inventory():
                 AND production.lastShowDate > NOW() -- Only include ongoing productions
 
             WHERE
-                COALESCE(%(query)s) IS NULL OR UPPER(prop.name) LIKE UPPER((%(query)s::text))
-                AND COALESCE(%(categoryID)s) IS NULL OR categoryID = %(categoryID)s::int
+                (COALESCE(%(query)s) IS NULL OR UPPER(prop.name) LIKE UPPER((%(query)s::text)))
+                AND (COALESCE(%(categoryID)s) IS NULL OR categoryID = %(categoryID)s::int)
 
             GROUP BY (prop.propID, location.name, production.productionID);
         """
@@ -58,6 +58,7 @@ def inventory():
             
     #         ;'''
     #     print(sqlQuery)
+        print(categoryID)
         records = cur.execute(sqlQuery, {'query': newquery if newquery else None, 
                                             'categoryID':int(categoryID) if categoryID else None, 
                                             'tagIDs':tagIDs, 'tagLen': len(tagIDs)}).fetchall()
@@ -94,21 +95,28 @@ def prop_detail(id):
     if request.method == 'GET':
         # Return the prop with the ID
         record = cur.execute('''
-            SELECT propID, prop.name AS propName, description, location.name AS locationName, isBroken, photoPath
-            FROM prop, location
-            WHERE prop.locationID = location.locationID
-            AND prop.propID = (%(propID)s)
+            SELECT prop.propID, prop.name AS propName, prop.description, location.name AS locationName, isBroken, prop.photoPath,
+                CASE 
+                    WHEN production.productionID IS NULL 
+                    THEN 1 
+                    ELSE 0
+                END AS available
+            FROM prop
+
+            JOIN location USING(locationID)
+            LEFT JOIN propsListItem ON propsListItem.propID = prop.propID
+            LEFT JOIN propsList ON propsList.propsListID = propsListItem.propsListID
+            LEFT JOIN production ON 
+                propsList.productionID = production.productionID
+                AND production.lastShowDate > NOW() -- Only include ongoing productions
+
+            WHERE
+                prop.propID = (%(propID)s)
+            GROUP BY (prop.propID, location.name, production.productionID);
+                             
             ;''', {'propID': propID}).fetchone()
-        # see if any upcoming productions involve this prop
-        available = cur.execute('''SELECT COUNT(propsListItemID)=0 AS available
-                                FROM propsListItem, propsList, production, prop
-                                WHERE propsListItem.propID = %(propID)s -- Has been linked to an item
-                                AND production.lastShowDate > NOW() -- The show has not concluded
-                                AND propsListItem.propsListID = propsList.propsListID -- Linking by foreign keys
-                                AND propsList.productionID = production.productionID;''', {"propID": propID}).fetchone()
         if not record:
             return redirect("/not-found")
-        record["available"] = int(available["available"])
         print((record))
         return jsonify(record)
     elif request.method == 'PUT':
@@ -117,8 +125,8 @@ def prop_detail(id):
         cur.execute('''UPDATE prop 
                         SET (name, description,  categoryID, locationID) 
                          = (%(name)s,%(description)s,%(categoryID)s,%(locationID)s) 
-                         WHERE propID = %s''', data)
-        return propID
+                         WHERE propID = %(propID)s''', data)
+        return jsonify(propID)
     elif request.method == 'DELETE':
         cur.execute('''DELETE FROM prop WHERE propID = %(propID)s''', {'propID': propID})
         return jsonify("Delete successful")
