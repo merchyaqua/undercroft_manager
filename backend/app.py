@@ -20,7 +20,7 @@ def inventory():
         # Return all results if no parameters are provided
         # Initially, I used this code for optional query parameters. However, this was inefficient since I was running a query for every single prop.
         # Return wanted things
-        newquery = query
+        newquery = '%'+query+'%'
         sqlQuery = """
             SELECT prop.propID, prop.name AS propName, isBroken, location.name AS locationName, prop.photoPath,
                 CASE 
@@ -123,8 +123,8 @@ def prop_detail(id):
         # Update the prop with given data
         data = dict(request.get_json())
         cur.execute('''UPDATE prop 
-                        SET (name, description,  categoryID, locationID) 
-                         = (%(name)s,%(description)s,%(categoryID)s,%(locationID)s) 
+                        SET (name, description,  categoryID, locationID, photoPath) 
+                         = (%(name)s,%(description)s,%(categoryID)s,%(locationID)s,%(photoPath)s) 
                          WHERE propID = %(propID)s''', data)
         return jsonify(propID)
     elif request.method == 'DELETE':
