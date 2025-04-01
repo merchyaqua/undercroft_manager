@@ -188,7 +188,8 @@ def production_detail(id):
         data = dict(request.get_json())
         cur.execute('''UPDATE production (name, firstShowDate, lastShowDate, photoPath) 
             SET (%(name)s,%(firstShowDate)s,%(lastShowDate)s,%(photoPath)s)
-            WHERE productionID = %(productionID)s''', data.update({'productionID': id})) # Concatenate the form MultiDict with productionID as a new key value pair.
+            WHERE productionID = %(productionID)s''', data.update({'productionID': id})) 
+        # Concatenate the form MultiDict with productionID as a new key value pair.
             
         return id
     elif request.method == 'DELETE':
